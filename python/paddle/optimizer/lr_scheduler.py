@@ -17,7 +17,7 @@ from __future__ import print_function
 import math
 import warnings
 
-from .. import unique_name
+from ..fluid import unique_name
 from ..fluid.framework import Variable
 from ..fluid.data_feeder import check_type
 
@@ -1162,7 +1162,7 @@ class MultiStepLR(_LearningRateEpochScheduler):
         return self.base_lr * (decay_rate**len(self.milestones))
 
 
-class LambdaLR(_LearningRateEpochSceduler):
+class LambdaLR(_LearningRateEpochScheduler):
     """
 
     Sets the learning rate of ``optimizer`` to the initial lr times a multiplicative factor, and this multiplicative
