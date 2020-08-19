@@ -22,10 +22,9 @@ from ..fluid.framework import Variable
 from ..fluid.data_feeder import check_type
 
 __all__ = [
-    'NoamScheduler', 'PiecewiseScheduler', 'NaturalExpScheduler',
-    'ExponentialScheduler', 'InverseTimeScheduler', 'PolynomialScheduler',
-    'CosineScheduler', 'LinearLrWarmup', 'ReduceLROnPlateau', 'StepDecay',
-    'MultiStepDecay', 'LambdaDecay'
+    'NoamLR', 'PiecewiseLR', 'NaturalExpLR', 'ExponentialLR', 'InverseTimeLR',
+    'PolynomialLR', 'CosineLR', 'LinearLrWarmup', 'ReduceLROnPlateau',
+    'StepDecay', 'MultiStepDecay', 'LambdaDecay'
 ]
 
 
@@ -117,7 +116,7 @@ class _LRScheduler(object):
         raise NotImplementedError()
 
 
-class PiecewiseScheduler(_LRScheduler):
+class PiecewiseLR(_LRScheduler):
     """
 
     Piecewise decay scheduler.
@@ -164,7 +163,7 @@ class PiecewiseScheduler(_LRScheduler):
     # TODO(Jack): modify example
 
     def __init__(self, boundaries, values, begin, step=1, dtype='float32'):
-        super(PiecewiseScheduler, self).__init__(begin, step, dtype)
+        super(PiecewiseLR, self).__init__(begin, step, dtype)
         self.boundaries = boundaries
         self.values = values
 
@@ -179,7 +178,7 @@ class PiecewiseScheduler(_LRScheduler):
         return self.create_lr_var(self.vars[len(self.values) - 1])
 
 
-class NaturalExpScheduler(_LRScheduler):
+class NaturalExpLR(_LRScheduler):
     """
 
     Applies natural exponential decay scheduler to the initial learning rate.
@@ -246,7 +245,7 @@ class NaturalExpScheduler(_LRScheduler):
                  begin=0,
                  step=1,
                  dtype='float32'):
-        super(NaturalExpScheduler, self).__init__(begin, step, dtype)
+        super(NaturalExpLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
@@ -263,7 +262,7 @@ class NaturalExpScheduler(_LRScheduler):
         return decayed_lr
 
 
-class ExponentialScheduler(_LRScheduler):
+class ExponentialLR(_LRScheduler):
     """
 
     Applies exponential decay to the learning rate.
@@ -329,7 +328,7 @@ class ExponentialScheduler(_LRScheduler):
                  begin=0,
                  step=1,
                  dtype='float32'):
-        super(ExponentialScheduler, self).__init__(begin, step, dtype)
+        super(ExponentialLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
@@ -346,7 +345,7 @@ class ExponentialScheduler(_LRScheduler):
         return decayed_lr
 
 
-class InverseTimeScheduler(_LRScheduler):
+class InverseTimeLR(_LRScheduler):
     """
 
     Applies inverse time decay to the initial learning rate.
@@ -408,7 +407,7 @@ class InverseTimeScheduler(_LRScheduler):
                  begin=0,
                  step=1,
                  dtype='float32'):
-        super(InverseTimeScheduler, self).__init__(begin, step, dtype)
+        super(InverseTimeLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
@@ -425,7 +424,7 @@ class InverseTimeScheduler(_LRScheduler):
         return decayed_lr
 
 
-class PolynomialScheduler(_LRScheduler):
+class PolynomialLR(_LRScheduler):
     """
 
     Applies polynomial decay to the initial learning rate.
@@ -491,7 +490,7 @@ class PolynomialScheduler(_LRScheduler):
                  begin=0,
                  step=1,
                  dtype='float32'):
-        super(PolynomialScheduler, self).__init__(begin, step, dtype)
+        super(PolynomialLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.decay_steps = decay_steps
         self.end_learning_rate = end_learning_rate
@@ -519,7 +518,7 @@ class PolynomialScheduler(_LRScheduler):
         return decayed_lr
 
 
-class CosineScheduler(_LRScheduler):
+class CosineLR(_LRScheduler):
     """
 
     Applies cosine decay to the learning rate.
@@ -564,7 +563,7 @@ class CosineScheduler(_LRScheduler):
                  begin=0,
                  step=1,
                  dtype='float32'):
-        super(CosineScheduler, self).__init__(begin, step, dtype)
+        super(CosineLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.step_each_epoch = step_each_epoch
         self.epochs = epochs
@@ -578,7 +577,7 @@ class CosineScheduler(_LRScheduler):
         return decayed_lr
 
 
-class NoamScheduler(_LRScheduler):
+class NoamLR(_LRScheduler):
     """
 
     Applies Noam decay to the initial learning rate. 
@@ -623,6 +622,8 @@ class NoamScheduler(_LRScheduler):
                   parameter_list = emb.parameters())
     """
 
+    # TODO(Jack): modify example
+
     def __init__(self,
                  d_model,
                  warmup_steps,
@@ -630,7 +631,7 @@ class NoamScheduler(_LRScheduler):
                  step=1,
                  dtype='float32',
                  learning_rate=1.0):
-        super(NoamScheduler, self).__init__(begin, step, dtype)
+        super(NoamLR, self).__init__(begin, step, dtype)
         self.learning_rate = learning_rate
         self.d_model = d_model
         self.warmup_steps = warmup_steps
