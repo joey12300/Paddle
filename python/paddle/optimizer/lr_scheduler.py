@@ -23,8 +23,8 @@ from ..fluid.data_feeder import check_type
 
 __all__ = [
     'NoamLR', 'PiecewiseLR', 'NaturalExpLR', 'ExponentialLR', 'InverseTimeLR',
-    'PolynomialLR', 'CosineLR', 'LinearLRWarmup', 'ReduceLROnPlateau',
-    'StepDecay', 'MultiStepDecay', 'LambdaDecay'
+    'PolynomialLR', 'CosineLR', 'LinearLRWarmup', 'ReduceLROnPlateau', 'StepLR',
+    'MultiStepLR', 'LambdaLR'
 ]
 
 
@@ -1069,9 +1069,162 @@ class StepLR(_LearningRateEpochScheduler):
 
         self.step_size = step_size
         self.decay_rate = decay_rate
-        super(StepDecay, self).__init__(learning_rate)
+        super(StepLR, self).__init__(learning_rate)
 
     def get_lr(self):
         decay_rate = self.create_lr_var(self.decay_rate)
         i = self.epoch_num // self.step_size
         return self.base_lr * (decay_rate**i)
+
+
+class MultiStepLR(_LearningRateEpochScheduler):
+    """
+
+    Decays the learning rate of ``optimizer`` by ``decay_rate`` once ``epoch`` reaches one of the milestones.
+
+    The algorithm can be described as the code below. 
+
+    .. code-block:: text
+
+        learning_rate = 0.5
+        milestones = [30, 50]
+        decay_rate = 0.1
+        if epoch < 30:
+            learning_rate = 0.5
+        elif epoch < 50:
+            learning_rate = 0.05
+        else:
+            learning_rate = 0.005
+
+    Parameters:
+        learning_rate (float|int): The initial learning rate. It can be set to python float or int number.
+        milestones (tuple|list): List or tuple of each boundaries. Must be increasing.
+        decay_rate (float, optional): The Ratio that the learning rate will be reduced. ``new_lr = origin_lr * decay_rate`` . 
+            It should be less than 1.0. Default: 0.1.
+
+    Returns:
+        None.
+
+    Examples:
+        .. code-block:: python
+            
+            import paddle.fluid as fluid
+            import numpy as np
+            with fluid.dygraph.guard():
+                x = np.random.uniform(-1, 1, [10, 10]).astype("float32")
+                linear = fluid.dygraph.Linear(10, 10)
+                input = fluid.dygraph.to_variable(x)
+                scheduler = fluid.dygraph.MultiStepDecay(0.5, milestones=[3, 5])
+                adam = fluid.optimizer.Adam(learning_rate = scheduler, parameter_list = linear.parameters())
+
+                for epoch in range(6):
+                    for batch_id in range(5):
+                        out = linear(input)
+                        loss = fluid.layers.reduce_mean(out)
+                        adam.minimize(loss)
+                    scheduler.epoch()
+
+                    print("epoch:{}, current lr is {}" .format(epoch, adam.current_step_lr()))
+                    # epoch:0, current lr is 0.5
+                    # epoch:1, current lr is 0.5
+                    # epoch:2, current lr is 0.5
+                    # epoch:3, current lr is 0.05
+                    # epoch:4, current lr is 0.05
+                    # epoch:5, current lr is 0.005
+
+    """
+
+    # TODO(Jack): modify example
+    def __init__(self, learning_rate, milestones, decay_rate=0.1):
+        if not isinstance(milestones, (tuple, list)):
+            raise TypeError(
+                "The type of 'milestones' in 'MultiStepDecay' must be 'tuple, list', but received %s."
+                % type(milestones))
+
+        if not all([
+                milestones[i] < milestones[i + 1]
+                for i in range(len(milestones) - 1)
+        ]):
+            raise ValueError('The elements of milestones must be incremented')
+        if decay_rate >= 1.0:
+            raise ValueError('decay_rate should be < 1.0.')
+
+        self.milestones = milestones
+        self.decay_rate = decay_rate
+        super(MultiStepLR, self).__init__(learning_rate)
+
+    def get_lr(self):
+        decay_rate = self.create_lr_var(self.decay_rate)
+        for i in range(len(self.milestones)):
+            if self.epoch_num < self.milestones[i]:
+                return self.base_lr * (decay_rate**i)
+
+        return self.base_lr * (decay_rate**len(self.milestones))
+
+
+class LambdaLR(_LearningRateEpochSceduler):
+    """
+
+    Sets the learning rate of ``optimizer`` to the initial lr times a multiplicative factor, and this multiplicative
+    factor is computed by function ``lr_lambda`` . ``lr_lambda`` is funciton which receives ``epoch`` .
+
+    The algorithm can be described as the code below. 
+
+    .. code-block:: text
+
+        learning_rate = 0.5        # init learning_rate
+        lr_lambda = lambda epoch: 0.95 ** epoch
+
+        learning_rate = 0.5        # epoch 0
+        learning_rate = 0.475      # epoch 1
+        learning_rate = 0.45125    # epoch 2
+
+    Parameters:
+        learning_rate (float|int): The initial learning rate. It can be set to python float or int number.
+        lr_lambda (function): A function which computes a multiplicative factor given an integer parameter ``epoch`` , and 
+            then multiply the initial learning rate by this multiplicative factor.
+    
+    Returns:
+        None.
+
+    Examples:
+        .. code-block:: python
+            
+            import paddle.fluid as fluid
+            import numpy as np
+            with fluid.dygraph.guard():
+                x = np.random.uniform(-1, 1, [10, 10]).astype("float32")
+                linear = fluid.dygraph.Linear(10, 10)
+                input = fluid.dygraph.to_variable(x)
+                scheduler = fluid.dygraph.LambdaDecay(0.5, lr_lambda=lambda x: 0.95**x)
+                adam = fluid.optimizer.Adam(learning_rate = scheduler, parameter_list = linear.parameters())
+
+                for epoch in range(6):
+                    for batch_id in range(5):
+                        out = linear(input)
+                        loss = fluid.layers.reduce_mean(out)
+                        adam.minimize(loss)
+                    scheduler.epoch()
+
+                    print("epoch:%d, current lr is %f" .format(epoch, adam.current_step_lr()))
+                    # epoch:0, current lr is 0.5
+                    # epoch:1, current lr is 0.475
+                    # epoch:2, current lr is 0.45125
+
+    """
+
+    # TODO(Jack): modify example
+
+    def __init__(self, learning_rate, lr_lambda):
+        if not callable(lr_lambda):
+            raise TypeError(
+                "The type of 'lr_lambda' in 'LambdaLR' must be 'function', but received %s."
+                % type(lr_lambda))
+
+        self.lr_lambda = lr_lambda
+        super(LambdaLR, self).__init__(learning_rate)
+
+    def get_lr(self):
+        base_lr = self.create_lr_var(self.base_lr)
+
+        return self.base_lr * self.lr_lambda(self.epoch_num)
