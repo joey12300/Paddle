@@ -22,9 +22,10 @@ from ..fluid.framework import Variable
 from ..fluid.data_feeder import check_type
 
 __all__ = [
-    'NoamDecay', 'PiecewiseDecay', 'NaturalExpDecay', 'ExponentialDecay',
-    'InverseTimeDecay', 'PolynomialDecay', 'CosineDecay', 'LinearLrWarmup',
-    'ReduceLROnPlateau', 'StepDecay', 'MultiStepDecay', 'LambdaDecay'
+    'NoamDecay', 'PiecewiseScheduler', 'NaturalExpScheduler',
+    'ExponentialScheduler', 'InverseTimeDecay', 'PolynomialDecay',
+    'CosineDecay', 'LinearLrWarmup', 'ReduceLROnPlateau', 'StepDecay',
+    'MultiStepDecay', 'LambdaDecay'
 ]
 
 
@@ -163,7 +164,7 @@ class PiecewiseScheduler(_LRScheduler):
     # TODO(Jack): modify example
 
     def __init__(self, boundaries, values, begin, step=1, dtype='float32'):
-        super(PiecewiseDecay, self).__init__(begin, step, dtype)
+        super(PiecewiseScheduler, self).__init__(begin, step, dtype)
         self.boundaries = boundaries
         self.values = values
 
@@ -176,3 +177,170 @@ class PiecewiseScheduler(_LRScheduler):
             if self.step_num < self.boundaries[i]:
                 return self.vars[i]
         return self.create_lr_var(self.vars[len(self.values) - 1])
+
+
+class NaturalExpScheduler(_LRScheduler):
+    """
+
+    Applies natural exponential decay scheduler to the initial learning rate.
+    
+    The algorithm can be described as following.
+
+    .. math::
+
+        decayed\_learning\_rate = learning\_rate * e^{y} 
+
+    If staircase is set to False, then:
+
+    .. math::
+
+        y = - decay\_rate * \\frac{global\_step}{decay\_steps}
+
+    If staircase is set to True, then:
+
+    .. math::
+
+        y = - decay\_rate * math.floor(\\frac{global\_step}{decay\_steps}) 
+
+    Parameters:
+        learning_rate(Variable|float): The initial learning rate. If the type 
+            is Variable, it's a tensor with shape [1], the data type can be  
+            float32 or float64. It also can be set to python int number.
+        decay_steps(int): The decay step size. It determines the decay cycle.
+        decay_rate(int): The decay rate.
+        staircase(bool, optional): If set to True, decay the learning rate at discrete intervals. The 
+            default value is False.
+        begin(int, optional): The begin step. The initial value of global_step described above. The default value is 0.
+        step(int, optional): The step size used to calculate the new global_step in the description above.
+            The default value is 1.
+        dtype(str, optional): The data type used to create the learning rate variable. The data type can be set as
+            'float32', 'float64'. The default value is 'float32'.
+
+    Returns:
+        None.
+
+    Examples:
+        .. code-block:: python
+
+            import paddle.fluid as fluid
+            base_lr = 0.1
+            with fluid.dygraph.guard():
+                emb = fluid.dygraph.Embedding([10, 10])
+                sgd_optimizer = fluid.optimizer.SGD(
+                        learning_rate=fluid.dygraph.NaturalExpDecay(
+                            learning_rate=base_lr,
+                            decay_steps=10000,
+                            decay_rate=0.5,
+                            staircase=True),
+                        parameter_list=emb.parameters())
+
+    """
+
+    # TODO(Jack): modify example
+
+    def __init__(self,
+                 learning_rate,
+                 decay_steps,
+                 decay_rate,
+                 staircase=False,
+                 begin=0,
+                 step=1,
+                 dtype='float32'):
+        super(NaturalExpScheduler, self).__init__(begin, step, dtype)
+        self.learning_rate = learning_rate
+        self.decay_steps = decay_steps
+        self.decay_rate = decay_rate
+        self.staircase = staircase
+
+    def step(self):
+        from ..fluid import layers
+        div_res = self.create_lr_var(self.step_num / self.decay_steps)
+        if self.staircase:
+            div_res = layers.floor(div_res)
+        decayed_lr = self.learning_rate * layers.exp(-1 * self.decay_rate *
+                                                     div_res)
+
+        return decayed_lr
+
+
+class ExponentialScheduler(_LRScheduler):
+    """
+
+    Applies exponential decay to the learning rate.
+
+    The algorithm can be described as following.
+    
+    .. math::
+
+        decayed\_learning\_rate = learning\_rate * decay\_rate ^ y 
+
+    If staircase is set to False, then:
+
+    .. math::
+
+        y = \\frac{global\_step}{decay\_steps} 
+
+    If staircase is set to True, then:
+
+    .. math::
+
+        y = math.floor(\\frac{global\_step}{decay\_steps})
+
+
+    Parameters:
+        learning_rate(Variable|float): The initial learning rate. If the type 
+            is Variable, it's a tensor with shape [1], the data type can be  
+            float32 or float64. It also can be set to python int number.
+        decay_steps(int): The decay step size. It determines the decay cycle.
+        decay_rate(float): The decay rate.
+        staircase(bool, optional): If set to True, decay the learning rate at discrete intervals. The 
+            default value is False.
+        begin(int, optional): The begin step. The initial value of global_step described above. The default value is 0.
+        step(int, optional): The step size used to calculate the new global_step in the description above.
+            The default value is 1.
+        dtype(str, optional): The data type used to create the learning rate variable. The data type can be set as
+            'float32', 'float64'. The default value is 'float32'.
+
+    Returns:
+        None.
+
+    Examples:
+        .. code-block:: python
+
+          import paddle.fluid as fluid
+          base_lr = 0.1
+          with fluid.dygraph.guard():
+              sgd_optimizer = fluid.optimizer.SGD(
+    	            learning_rate=fluid.dygraph.ExponentialDecay(
+		        learning_rate=base_lr,
+    		        decay_steps=10000,
+		        decay_rate=0.5,
+		        staircase=True))
+
+    """
+
+    # TODO(Jack): modify example
+
+    def __init__(self,
+                 learning_rate,
+                 decay_steps,
+                 decay_rate,
+                 staircase=False,
+                 begin=0,
+                 step=1,
+                 dtype='float32'):
+        super(ExponentialScheduler, self).__init__(begin, step, dtype)
+        self.learning_rate = learning_rate
+        self.decay_steps = decay_steps
+        self.decay_rate = decay_rate
+        self.staircase = staircase
+
+    def step(self):
+        from .. import layers
+        div_res = self.create_lr_var(self.step_num / self.decay_steps)
+        if self.staircase:
+            div_res = layers.floor(div_res)
+
+        decayed_lr = self.learning_rate * (self.decay_rate**div_res)
+
+        return decayed_lr
