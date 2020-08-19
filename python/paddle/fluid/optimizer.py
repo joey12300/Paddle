@@ -71,8 +71,10 @@ class Optimizer(object):
             parameter_list) if parameter_list is not None else None
         self._name = name
         if framework.in_dygraph_mode():
+            from ..optimizer.lr_scheduler import _LRScheduler
             if not isinstance(learning_rate, float) and \
-                    not isinstance(learning_rate, LearningRateDecay):
+                    not isinstance(learning_rate, LearningRateDecay) and \
+                    not isinstance(learning_rate, _LRScheduler):
                 raise TypeError(
                     "learning rate should be float or LearningRateDecay, got %s here"
                     % type(learning_rate))
@@ -148,10 +150,13 @@ class Optimizer(object):
             for para_name, var_tmp in v.items():
                 state_dict[var_tmp.name] = var_tmp
         # global step if use lr decay
-        if isinstance(self._learning_rate, LearningRateDecay):
+        from ..optimizer.lr_scheduler import _LRScheduler, _LearningRateEpochScheduler
+        if isinstance(self._learning_rate, LearningRateDecay) or \
+           isinstance(self._learning_rate, _LRScheduler):
             state_dict["LR_Scheduler"] = self._learning_rate.state_dict()
 
-            if not isinstance(self._learning_rate, _LearningRateEpochDecay):
+            if not isinstance(self._learning_rate, _LearningRateEpochDecay) and \
+               not isinstance(self._learning_rate, _LearningRateEpochScheduler):
                 var_tmp = None
                 var_temp = framework._varbase_creator(
                     None, name='global_step', dtype='int32')
@@ -192,10 +197,13 @@ class Optimizer(object):
 
         '''
 
-        if isinstance(self._learning_rate, LearningRateDecay):
+        from ..optimizer.lr_scheduler import _LRScheduler, _LearningRateEpochScheduler
+        if isinstance(self._learning_rate, LearningRateDecay) or \
+           isinstance(self._learning_rate, _LRScheduler):
             self._learning_rate.set_dict(state_dict["LR_Scheduler"])
 
-            if not isinstance(self._learning_rate, _LearningRateEpochDecay):
+            if not isinstance(self._learning_rate, _LearningRateEpochDecay) and \
+               not isinstance(self._learning_rate, _LearningRateEpochScheduler):
                 assert 'global_step' in state_dict, \
                         'Global step not in state dict, Dygraph use LearningRateDecay, global_step must in state_dict'
                 global_step = state_dict['global_step']
@@ -253,6 +261,7 @@ class Optimizer(object):
     def _create_global_learning_rate(self):
         if imperative_base.enabled():
             # create learning rate Variable
+            from ..optimizer.lr_scheduler import _LRScheduler
             if isinstance(self._learning_rate, float):
                 lr = self._global_learning_rate()
 
@@ -267,7 +276,8 @@ class Optimizer(object):
                         dtype='float32' if self._dtype is None else self._dtype,
                         persistable=True)
             # get learning rate Variable from LearningRateDecay
-            elif isinstance(self._learning_rate, LearningRateDecay):
+            elif isinstance(self._learning_rate, LearningRateDecay) or \
+                 isinstance(self._learning_rate, _LRScheduler):
                 self._learning_rate_map[framework.default_main_program(
                 )] = self._learning_rate()
             else:
@@ -349,7 +359,9 @@ class Optimizer(object):
             raise TypeError(
                 "The type of 'value' in optimizer.set_lr must be (float, Variable), but received %s."
                 % (type(value)))
-        if isinstance(self._learning_rate, LearningRateDecay):
+        from ..optimizer.lr_scheduler import _LRScheduler
+        if isinstance(self._learning_rate, LearningRateDecay) or \
+           isinstance(self._learning_rate, _LRScheduler):
             raise RuntimeError(
                 "optimizer's learning rate can't be LearningRateDecay when invoke this API, because this will lead to conflict."
             )
@@ -424,9 +436,11 @@ class Optimizer(object):
         if isinstance(current_lr, framework.Variable):
             return self._global_learning_rate().numpy()[0]
 
+        from ..optimizer.lr_scheduler import _LearningRateEpochScheduler
         if isinstance(self._learning_rate, float):
             return self._learning_rate
-        elif isinstance(self._learning_rate, _LearningRateEpochDecay):
+        elif isinstance(self._learning_rate, _LearningRateEpochDecay) or \
+             isinstance(self._learning_rate, _LearningRateEpochScheduler):
             step_lr = self._learning_rate()
             return step_lr.numpy()[0]
         else:

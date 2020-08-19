@@ -44,6 +44,7 @@ class _LRScheduler(object):
         self.dtype = dtype
 
     def __call__(self):
+        lr = self.step()
         if isinstance(lr, float):
             lr = self.create_lr_var(lr)
         self.step_num += self.step_size
@@ -111,6 +112,12 @@ class _LRScheduler(object):
             warnings.warn(
                 "There are some unused values in state_dict. Maybe the optimizer have different 'LearningRateDecay' when invoking state_dict and set_dict"
             )
+
+    def set_dict(self, state_dict):
+        """
+        alias of load_state_dict
+        """
+        self.load_state_dict(state_dict)
 
     def step(self):
         raise NotImplementedError()
@@ -335,10 +342,10 @@ class ExponentialLR(_LRScheduler):
         self.staircase = staircase
 
     def step(self):
-        from ..fluid import layers
+        from ..tensor import floor
         div_res = self.create_lr_var(self.step_num / self.decay_steps)
         if self.staircase:
-            div_res = layers.floor(div_res)
+            div_res = floor(div_res)
 
         decayed_lr = self.learning_rate * (self.decay_rate**div_res)
 
@@ -962,7 +969,7 @@ class _LearningRateEpochScheduler(_LRScheduler):
 
         self.base_lr = float(learning_rate)
 
-        self.epoch_num = -1
+        self.step_num = -1
         self.dtype = dtype
         if dtype is None:
             self.dtype = "float32"
@@ -973,7 +980,7 @@ class _LearningRateEpochScheduler(_LRScheduler):
     # For those subclass who overload _LearningRateEpochDecay, "self.epoch_num/learning_rate" will be stored by default.
     # you can change it for your subclass.
     def _state_keys(self):
-        self.keys = ['epoch_num', 'learning_rate']
+        self.keys = ['step_num', 'learning_rate']
 
     def __call__(self):
         """ 
@@ -988,9 +995,9 @@ class _LearningRateEpochScheduler(_LRScheduler):
         compueted learning_rate and update it when invoked.
         """
         if epoch is None:
-            self.epoch_num += 1
+            self.step_num += 1
         else:
-            self.epoch_num = epoch
+            self.step_num = epoch
 
         self.learning_rate = self.get_lr()
 
@@ -1073,7 +1080,7 @@ class StepLR(_LearningRateEpochScheduler):
 
     def get_lr(self):
         decay_rate = self.create_lr_var(self.decay_rate)
-        i = self.epoch_num // self.step_size
+        i = self.step_num // self.step_size
         return self.base_lr * (decay_rate**i)
 
 
@@ -1156,7 +1163,7 @@ class MultiStepLR(_LearningRateEpochScheduler):
     def get_lr(self):
         decay_rate = self.create_lr_var(self.decay_rate)
         for i in range(len(self.milestones)):
-            if self.epoch_num < self.milestones[i]:
+            if self.step_num < self.milestones[i]:
                 return self.base_lr * (decay_rate**i)
 
         return self.base_lr * (decay_rate**len(self.milestones))
@@ -1227,4 +1234,4 @@ class LambdaLR(_LearningRateEpochScheduler):
     def get_lr(self):
         base_lr = self.create_lr_var(self.base_lr)
 
-        return self.base_lr * self.lr_lambda(self.epoch_num)
+        return self.base_lr * self.lr_lambda(self.step_num)

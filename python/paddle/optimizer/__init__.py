@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 
-from ..fluid.optimizer import  SGD, Momentum, Adagrad, Adam, Adamax, Dpsgd, DecayedAdagrad, \
+from ..fluid.optimizer import SGD, Momentum, Adagrad, Adam, Adamax, Dpsgd, DecayedAdagrad, \
             Ftrl, SGDOptimizer, MomentumOptimizer, AdagradOptimizer, \
             AdamOptimizer, AdamaxOptimizer, DpsgdOptimizer, \
             DecayedAdagradOptimizer, RMSPropOptimizer, FtrlOptimizer, Adadelta, \
