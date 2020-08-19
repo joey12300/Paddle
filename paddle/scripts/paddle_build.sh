@@ -195,6 +195,12 @@ function cmake_base() {
     distibuted_flag=${WITH_DISTRIBUTE:-OFF}
     grpc_flag=${WITH_GRPC:-${distibuted_flag}}
 
+    if [ "$SYSTEM" == "Darwin" ]; then
+        gloo_flag="OFF"
+    else
+        gloo_flag=${distibuted_flag}
+    fi
+
     cat <<EOF
     ========================================
     Configuring cmake in /paddle/build ...
@@ -219,6 +225,7 @@ function cmake_base() {
         -DPY_VERSION=${PY_VERSION:-2.7}
         -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX:-/paddle/build}
         -DWITH_GRPC=${grpc_flag}
+	    -DWITH_GLOO=${gloo_flag}
         -DWITH_LITE=${WITH_LITE:-OFF}
         -DLITE_GIT_TAG=develop
     ========================================
@@ -249,6 +256,7 @@ EOF
         -DPY_VERSION=${PY_VERSION:-2.7} \
         -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX:-/paddle/build} \
         -DWITH_GRPC=${grpc_flag} \
+	    -DWITH_GLOO=${gloo_flag} \
         -DLITE_GIT_TAG=develop \
         -DWITH_LITE=${WITH_LITE:-OFF};build_error=$?
     if [ "$build_error" != 0 ];then
@@ -562,6 +570,7 @@ function generate_upstream_develop_api_spec() {
 }
 
 function generate_api_spec() {
+    set -e
     spec_kind=$2
     if [ "$spec_kind" != "PR" ] && [ "$spec_kind" != "DEV" ]; then
         echo "Not supported $2"
@@ -572,7 +581,8 @@ function generate_api_spec() {
     cd ${PADDLE_ROOT}/build/.check_api_workspace
     virtualenv .${spec_kind}_env
     source .${spec_kind}_env/bin/activate
-    pip install ${PADDLE_ROOT}/build/python/dist/*whl
+    pip install -r ${PADDLE_ROOT}/python/requirements.txt
+    pip --no-cache-dir install ${PADDLE_ROOT}/build/python/dist/*whl
     spec_path=${PADDLE_ROOT}/paddle/fluid/API_${spec_kind}.spec
     python ${PADDLE_ROOT}/tools/print_signatures.py paddle > $spec_path
 
