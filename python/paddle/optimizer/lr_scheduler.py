@@ -23,7 +23,7 @@ from ..fluid.data_feeder import check_type
 
 __all__ = [
     'NoamDecay', 'PiecewiseScheduler', 'NaturalExpScheduler',
-    'ExponentialScheduler', 'InverseTimeDecay', 'PolynomialDecay',
+    'ExponentialScheduler', 'InverseTimeScheduler', 'PolynomialDecay',
     'CosineDecay', 'LinearLrWarmup', 'ReduceLROnPlateau', 'StepDecay',
     'MultiStepDecay', 'LambdaDecay'
 ]
@@ -336,11 +336,90 @@ class ExponentialScheduler(_LRScheduler):
         self.staircase = staircase
 
     def step(self):
-        from .. import layers
+        from ..fluid import layers
         div_res = self.create_lr_var(self.step_num / self.decay_steps)
         if self.staircase:
             div_res = layers.floor(div_res)
 
         decayed_lr = self.learning_rate * (self.decay_rate**div_res)
+
+        return decayed_lr
+
+
+class InverseTimeScheduler(_LRScheduler):
+    """
+
+    Applies inverse time decay to the initial learning rate.
+
+    The algorithm can be described as following.
+    If staircase is set to False, then:
+
+    .. math::
+
+        decayed\_learning\_rate = \\frac{learning\_rate}{1 + decay\_rate * \\frac{global\_step}{decay\_step}}  
+
+    If staircase is set to True, then:
+
+    .. math::
+
+        decayed\_learning\_rate = \\frac{learning\_rate}{1 + decay\_rate * math.floor(\\frac{global\_step}{decay\_step})}
+
+    Parameters:
+        learning_rate(Variable|float): The initial learning rate. If the type 
+            is Variable, it's a tensor with shape [1], the data type can be  
+            float32 or float64. It also can be set to python int number.
+        decay_steps(int): The decay step size. It determines the decay cycle.
+        decay_rate(float): The decay rate.
+        staircase(bool, optional): If set to True, decay the learning rate at discrete intervals. The 
+            default value is False.
+        begin(int, optional): The begin step. The initial value of global_step described above. The default value is 0.
+        step(int, optional): The step size used to calculate the new global_step in the description above.
+            The default value is 1.
+        dtype(str, optional): The data type used to create the learning rate variable. The data type can be 
+            'float32', 'float64'. The default value is 'float32'.
+
+    Returns:
+        None.
+
+    Examples:
+        .. code-block:: python
+
+          import paddle.fluid as fluid
+          base_lr = 0.1
+          with fluid.dygraph.guard():
+              emb = fluid.dygraph.Embedding([10, 10])
+              sgd_optimizer = fluid.optimizer.SGD(
+	          learning_rate=fluid.dygraph.InverseTimeDecay(
+		        learning_rate=base_lr,
+		        decay_steps=10000,
+		        decay_rate=0.5,
+		        staircase=True),
+                  parameter_list = emb.parameters())
+
+    """
+
+    # TODO(Jack): modify example
+
+    def __init__(self,
+                 learning_rate,
+                 decay_steps,
+                 decay_rate,
+                 staircase=False,
+                 begin=0,
+                 step=1,
+                 dtype='float32'):
+        super(InverseTimeScheduler, self).__init__(begin, step, dtype)
+        self.learning_rate = learning_rate
+        self.decay_steps = decay_steps
+        self.decay_rate = decay_rate
+        self.staircase = staircase
+
+    def step(self):
+        from ..fluid import layers
+        div_res = self.create_lr_var(self.step_num / self.decay_steps)
+        if self.staircase:
+            div_res = layers.floor(div_res)
+
+        decayed_lr = self.learning_rate / (1 + self.decay_rate * div_res)
 
         return decayed_lr
