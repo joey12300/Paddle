@@ -101,10 +101,56 @@ struct GRUUnitGradFunctor<platform::CPUDeviceContext, T> {
   }
 };
 
+template <typename T>
+struct GRUUnitFunctorV2<platform::CPUDeviceContext, T> {
+  static void compute(const platform::CPUDeviceContext &context,
+                      GRUMetaValue<T> value, int frame_size, int batch_size,
+                      const detail::ActivationType active_node,
+                      const detail::ActivationType active_gate) {
+#ifndef __NVCC__
+    auto blas = math::GetBlas<platform::CPUDeviceContext, T>(context);
+    if (value.prev_out_value) {
+      blas.GEMM(false, false, batch_size, frame_size * 2, frame_size, 1,
+                value.prev_out_value, frame_size, value.gate_weight,
+                frame_size * 2, 1, value.gate_value, frame_size * 3);
+
+      blas.GEMM(false, false, batch_size, frame_size, frame_size, 1,
+                value.prev_out_value, frame_size, value.state_weight,
+                frame_size, 1, value.reset_output_value, frame_size);
+    }
+    detail::forward_reset_output(detail::forward::gru_resetOutput<T>(), value,
+                                 frame_size, batch_size, active_gate, false);
+
+    T *cell_state_value = value.gate_value + 2 * frame_size;
+    blas.VADD(frame_size, cell_state_value, value.reset_output_value,
+              cell_state_value);
+
+    detail::forward_final_output(detail::forward::gru_finalOutput<T>(), value,
+                                 frame_size, batch_size, active_node, true);
+#endif
+  }
+};
+
+template <typename T>
+struct GRUUnitGradFunctorV2<platform::CPUDeviceContext, T> {
+  static void compute(const platform::CPUDeviceContext &context,
+                      GRUMetaValue<T> value, GRUMetaGrad<T> grad,
+                      int frame_size, int batch_size,
+                      const detail::ActivationType active_node,
+                      const detail::ActivationType active_gate) {
+#ifndef __NVCC__
+
+#endif
+  }
+};
+
 template struct GRUUnitFunctor<platform::CPUDeviceContext, float>;
 template struct GRUUnitFunctor<platform::CPUDeviceContext, double>;
 template struct GRUUnitGradFunctor<platform::CPUDeviceContext, float>;
 template struct GRUUnitGradFunctor<platform::CPUDeviceContext, double>;
+
+template struct GRUUnitFunctorV2<platform::CPUDeviceContext, float>;
+template struct GRUUnitFunctorV2<platform::CPUDeviceContext, double>;
 
 }  // namespace math
 }  // namespace operators
