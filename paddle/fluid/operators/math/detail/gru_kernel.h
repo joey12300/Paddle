@@ -32,7 +32,7 @@ class gru_resetOutput {
                              T *prev_out, T *value_reset_output,
                              ActivationType act_gate,
                              T *value_reset_bias = nullptr,
-                             bool old_version = false) {
+                             bool old_version = true) {
     *value_update_gate = activation(*value_update_gate, act_gate);
     *value_reset_gate = activation(*value_reset_gate, act_gate);
     if (old_version) {
@@ -52,7 +52,7 @@ class gru_resetOutput {
                              __m256 *value_reset_output,
                              ActivationType act_gate,
                              __m256 *value_reset_bias = nullptr,
-                             bool old_version = false) {
+                             bool old_version = true) {
     *value_update_gate = activation(*value_update_gate, act_gate);
     *value_reset_gate = activation(*value_reset_gate, act_gate);
     if (old_version) {

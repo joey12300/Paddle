@@ -433,17 +433,17 @@ class TestCUDNNLstmOp(OpTest):
         self.op_type = "cudnn_lstm"
         self.dtype = np.float64
         self.sequence_length = np.array([12, 11, 10, 9, 8], dtype=np.int32)
-        self.num_layers = 2
+        self.num_layers = 1
         self.is_bidirec = False
         self.is_test = False
         self.set_attrs()
 
         direction_num = 2 if self.is_bidirec else 1
         direction = "bidirectional" if self.is_bidirec else "forward"
-        seq_length = 2
-        batch_size = 4
-        input_size = 5
-        hidden_size = 4
+        seq_length = 12
+        batch_size = 5
+        input_size = 12
+        hidden_size = 8
 
         input = np.random.uniform(
             low=-0.1, high=0.1,
@@ -504,10 +504,11 @@ class TestCUDNNLstmOp(OpTest):
             'StateOut': state_out
         }
 
-    #def test_output_with_place(self):
-    #    place = core.CUDAPlace(0)
-    #    self.check_output_with_place(
-    #        place, no_check_set=['Reserve', 'StateOut'])
+    def test_output_with_place(self):
+        place = core.CUDAPlace(0)
+        place = core.CPUPlace()
+        self.check_output_with_place(
+            place, no_check_set=['Reserve', 'StateOut'])
 
     def set_attrs(self):
         self.sequence_length = None
@@ -519,16 +520,19 @@ class TestCUDNNLstmOp(OpTest):
         grad_check_list = ['Input', 'InitH', 'InitC']
         grad_check_list.extend(var_name_list)
         for var_name in var_name_list:
-            self.check_grad_with_place(place,
-                                       set(grad_check_list),
-                                       ['Out', 'LastH', 'LastC'])
+            if not self.is_test:
+                self.check_grad_with_place(place,
+                                           set(grad_check_list),
+                                           ['Out', 'LastH', 'LastC'])
 
 
-#class TestCUDNNLstmCpu(TestCUDNNLstmOp):
-#    def test_output_with_place(self):
-#        place = core.CPUPlace()
-#        self.check_output_with_place(
-#            place, no_check_set=['Reserve', 'StateOut'])
+class TestCUDNNLstmCpu(TestCUDNNLstmOp):
+    def test_output_with_place(self):
+        place = core.CPUPlace()
+        self.check_output_with_place(
+            place, no_check_set=['Reserve', 'StateOut'])
+
+
 #
 #
 #class TestCUDNNLstmCpu1(TestCUDNNLstmCpu):
@@ -567,10 +571,12 @@ class TestCUDNNLstmOp(OpTest):
 #        self.num_layers = 2
 #
 #
-#class TestCUDNNLstmCpu7(TestCUDNNLstmCpu):
-#    def set_attrs(self):
-#        self.is_test = True
-#        self.num_layers = 2
+class TestCUDNNLstmCpu7(TestCUDNNLstmCpu):
+    def set_attrs(self):
+        self.is_test = True
+        self.num_layers = 2
+
+
 #
 #
 #@unittest.skipIf(not core.is_compiled_with_cuda(),

@@ -65,17 +65,20 @@ void hl_naive_gru_forward_reset_output(
 }
 
 template <class OpFinalOutput, typename T>
-void hl_naive_gru_forward_final_output(OpFinalOutput op_final_output,
-                                       T *gate_value,
-                                       const T *prev_output_value,
-                                       T *output_value, int frame_size,
-                                       ActivationType active_node,
-                                       bool origin_mode) {
+void hl_naive_gru_forward_final_output(
+    OpFinalOutput op_final_output, T *gate_value, const T *prev_output_value,
+    T *output_value, int frame_size, ActivationType active_node,
+    bool origin_mode, bool old_version = true) {
   T r_value_update_gate;
   T r_value_frame_state;
   T r_prev_out = 0;
   T r_output;
-  T *update_gate = gate_value;
+  T *update_gate;
+  if (old_version) {
+    update_gate = gate_value;
+  } else {
+    update_gate = gate_value + frame_size;
+  }
   T *frame_state = gate_value + frame_size * 2;
 
   for (int i = 0; i < frame_size; i++) {
@@ -178,14 +181,21 @@ void hl_avx_gru_forward_final_output(OpFinalOutput op_final_output,
                                      T *gate_value, const T *prev_output_value,
                                      T *output_value, int frame_size,
                                      ActivationType active_node,
-                                     bool origin_mode) {
+                                     bool origin_mode,
+                                     bool old_version = true) {
 #ifdef __AVX__
   __m256 r_value_update_gate, r_value_update_gate_last = _mm256_set1_ps(0.0f);
   __m256 r_value_frame_state, r_value_frame_state_last = _mm256_set1_ps(0.0f);
   __m256 r_prev_out = _mm256_set1_ps(0.0f),
          r_prev_out_last = _mm256_set1_ps(0.0f);
   __m256 r_output;
-  T *update_gate = gate_value;
+  T *update_gate;
+  if (old_version) {
+    update_gate = gate_value;
+  } else {
+    update_gate = gate_value + frame_size;
+  }
+
   T *frame_state = gate_value + frame_size * 2;
   int block = 8;
   const int n = frame_size;
@@ -262,17 +272,19 @@ template <class OpFinalOutput, typename T>
 inline void forward_final_output(OpFinalOutput op_final_output,
                                  GRUMetaValue<T> value, int frame_size,
                                  int batch_size, ActivationType active_node,
-                                 bool origin_mode) {
+                                 bool origin_mode, bool old_version = true) {
   for (int b = 0; b < batch_size; b++) {
     if (OpFinalOutput::avx && (frame_size > static_cast<int>(8 - 1)) &&
         (sizeof(T) == 4)) {
       hl_avx_gru_forward_final_output(op_final_output, value.gate_value,
                                       value.prev_out_value, value.output_value,
-                                      frame_size, active_node, origin_mode);
+                                      frame_size, active_node, origin_mode,
+                                      old_version);
     } else {
-      hl_naive_gru_forward_final_output(
-          op_final_output, value.gate_value, value.prev_out_value,
-          value.output_value, frame_size, active_node, origin_mode);
+      hl_naive_gru_forward_final_output(op_final_output, value.gate_value,
+                                        value.prev_out_value,
+                                        value.output_value, frame_size,
+                                        active_node, origin_mode, old_version);
     }
 
     value.gate_value += frame_size * 3;

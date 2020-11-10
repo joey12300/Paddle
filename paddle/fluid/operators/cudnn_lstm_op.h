@@ -41,6 +41,18 @@ using TensorList = std::vector<framework::Tensor>;
 double total_time = 0.0;
 
 template <typename T>
+void Print1DTensor(const Tensor* a, std::string name) {
+  const int& size = a->dims()[0];
+  std::string message = "print value, name is " + name + "\n";
+  for (int i = 0; i < size; i++) {
+    message += std::to_string(a->data<T>()[i]) + " ";
+  }
+  message += "\n";
+  VLOG(0) << message;
+  VLOG(0) << "----------------------------";
+}
+
+template <typename T>
 void Print2DTensor(const Tensor* a, std::string name) {
   const int& heigth = a->dims()[0];
   const int& width = a->dims()[1];
@@ -367,6 +379,7 @@ struct GRUCell : Cell<T> {
                   const Tensor* init_c, Tensor* last_h, Tensor* last_c,
                   Tensor* last_c_act, Tensor* output,
                   const Tensor* bias_hh) const override {
+    Print3DTensor<T>(input, "gate value before GRUCell");
     // weight_hh * init_h (not include )
     size_t frame_size = init_h->dims()[2];
     size_t batch_size = init_h->dims()[1];
@@ -375,11 +388,18 @@ struct GRUCell : Cell<T> {
     gru_value.gate_weight = weight_hh->data<T>();
     gru_value.state_weight = weight_hh->data<T>() + 2 * frame_size * frame_size;
     gru_value.reset_bias = bias_hh->data<T>() + 2 * frame_size;
+    VLOG(0) << "frame_size:" << frame_size;
+    VLOG(0) << "bias_hh dims:" << bias_hh->dims();
+    Print1DTensor<T>(bias_hh, "bias_hh");
 
     gru_value.gate_value = input->data<T>();
     gru_value.reset_output_value = last_c->data<T>();
     gru_value.output_value = output->data<T>();
     gru_value.prev_out_value = init_h->data<T>();
+    VLOG(0) << "pre hidden dims: " << init_h->dims();
+    VLOG(0) << "gate dims: " << input->dims();
+    VLOG(0) << "weight_hh dims:" << weight_hh->dims();
+    Print3DTensor<T>(init_h, "pre hidden");
 
     auto gate_act = math::detail::GetActivationType("sigmoid_v2");
     auto cand_act = math::detail::GetActivationType("tanh_v2");
@@ -387,6 +407,9 @@ struct GRUCell : Cell<T> {
     math::GRUUnitFunctorV2<platform::CPUDeviceContext, T>::compute(
         *device_ctx, gru_value, frame_size, batch_size, cand_act, gate_act);
     framework::TensorCopy(*output, device_ctx->GetPlace(), *device_ctx, last_h);
+
+    Print3DTensor<T>(input, "gate value after GRUCell");
+    Print3DTensor<T>(output, "hidden tensor");
   }
 };
 
@@ -451,6 +474,7 @@ struct Layer {
                   const Tensor& bias_ih, const Tensor& bias_hh,
                   Tensor* cache_input, bool is_test) {
     // crate the temp input for the X * W_ih^T + Bias_ih
+    Print3DTensor<T>(input, "input");
     auto& dev_ctx =
         context.template device_context<platform::CPUDeviceContext>();
     const int& hidden_size = weight.dims()[0];
@@ -476,19 +500,24 @@ struct Layer {
         framework::product(cache_input->dims()) / cache_input->dims()[2];
     eigen_in =
         eigen_in + eigen_bias_ih.broadcast(Eigen::DSizes<int, 2>(row_num, 1));
+    Print3DTensor<T>(cache_input, "cache_input before add bias_hh gates");
     if (is_gru(context)) {
       // reset_gate update_gate cell_gate = [1, 1, 0]
       Tensor bias_hh_tmp;
-      bias_hh_tmp.Resize({3, bias_hh.numel() / 3});
+      bias_hh_tmp.Resize({bias_hh.numel()});
       bias_hh_tmp.mutable_data<T>(context.GetPlace());
       framework::TensorCopy(bias_hh, context.GetPlace(), dev_ctx, &bias_hh_tmp);
+      bias_hh_tmp.Resize({3, bias_hh_tmp.numel() / 3});
       auto bias_hh_tmp_unbind = Unbind(bias_hh_tmp);
       math::SetConstant<platform::CPUDeviceContext, T> zero;
       zero(dev_ctx, &bias_hh_tmp_unbind[2], static_cast<T>(0.0));
+
       auto eigen_bias_hh_tmp = framework::EigenMatrix<T>::From(
           bias_hh_tmp, framework::make_ddim({1, bias_hh.dims()[0]}));
       eigen_in = eigen_in +
                  eigen_bias_hh_tmp.broadcast(Eigen::DSizes<int, 2>(row_num, 1));
+      Print3DTensor<T>(cache_input, "cache_input");
+
     } else {
       auto eigen_bias_hh = framework::EigenMatrix<T>::From(
           bias_hh, framework::make_ddim({1, bias_hh.dims()[0]}));
@@ -700,7 +729,8 @@ struct Layer {
       cell_value->Resize({time_step, cell_value->numel() / time_step});
       cell_value_tensors = Unbind(*cell_value);
       if (is_lstm(context)) {
-        cell_act_value->Resize({time_step, cell_value->numel() / time_step});
+        cell_act_value->Resize(
+            {time_step, cell_act_value->numel() / time_step});
         cell_act_value_tensors = Unbind(*cell_act_value);
       }
     }
@@ -838,21 +868,16 @@ void SplitReserveData(const framework::ExecutionContext& ctx,
   const int& cell_act_data_idx = (gate_num + 2) * num_layers;
   // simple rnn
   int hidden_data_start_idx = gate_data_idx;
-  int hidden_data_idx = gate_data_idx + (num_layers - 1);
-
   *gate_data = reserve_data->Slice(0, gate_data_idx);
   if (is_lstm(ctx)) {
     *cell_data = reserve_data->Slice(gate_data_idx, cell_data_idx);
     *cell_act_data = reserve_data->Slice(cell_data_idx, cell_act_data_idx);
     hidden_data_start_idx = cell_act_data_idx;
-    hidden_data_idx = cell_act_data_idx + (num_layers - 1);
   } else if (is_gru(ctx)) {
     *cell_data = reserve_data->Slice(gate_data_idx, cell_data_idx);
     hidden_data_start_idx = cell_data_idx;
-    hidden_data_idx = cell_data_idx + (num_layers - 1);
-  } else {
   }
-
+  int hidden_data_idx = hidden_data_start_idx + (num_layers - 1);
   if (num_layers > 1) {
     *hidden_data = reserve_data->Slice(hidden_data_start_idx, hidden_data_idx);
   }
@@ -875,8 +900,10 @@ void AllocateReserveData(const framework::ExecutionContext& ctx,
   int hidden_data_idx = (num_layers - 1);
   if (is_lstm(ctx)) {
     hidden_data_idx += (gate_num + 2) * num_layers;
-  } else {
+  } else if (is_gru(ctx)) {
     hidden_data_idx += (gate_num + 1) * num_layers;
+  } else {
+    hidden_data_idx += gate_num * num_layers;
   }
 
   reserve_data->Resize({hidden_data_idx, block_size});
@@ -932,7 +959,6 @@ void RnnFunc(const framework::ExecutionContext& ctx, const Tensor* input,
     gate_data.Resize({num_layers, gate_data.numel() / num_layers});
     cell_data.Resize({num_layers, cell_data.numel() / num_layers});
     cell_act_data.Resize({num_layers, cell_act_data.numel() / num_layers});
-
     if (num_layers > 1) {
       hidden_data.Resize(
           {num_layers - 1, hidden_data.numel() / (num_layers - 1)});
@@ -958,7 +984,7 @@ void RnnFunc(const framework::ExecutionContext& ctx, const Tensor* input,
       if (cell_data.numel() > 0) /** for lstm, gru **/ {
         curr_cell_data = cell_data.Slice(i, i + 1);
       }
-      if (curr_cell_act_data.numel() > 0) /** for lstm **/ {
+      if (cell_act_data.numel() > 0) /** for lstm **/ {
         curr_cell_act_data = cell_act_data.Slice(i, i + 1);
       }
 

@@ -63,6 +63,10 @@ class SimpleRNNCell(LSTMCell):
             h = np.maximum(z, 0)
         elif self.act == "rnn_tanh":
             h = np.tanh(z)
+        print("gate:", flush=True)
+        print(z, flush=True)
+        print("hidden:", flush=True)
+        print(h, flush=True)
         return h, h
 
 
@@ -130,32 +134,45 @@ class SimpleRNN(RNNMixin):
 
 
 class TestSimpleRNNOpCpu(OpTest):
+    def get_weight_names(self, direction_num):
+        weight_names = []
+        for i in range(self.num_layers):
+            for j in range(0, 2 * direction_num):
+                weight_names.append("{}.weigth_{}".format(i, j))
+        for i in range(self.num_layers):
+            for j in range(0, 2 * direction_num):
+                weight_names.append("{}.bias_{}".format(i, j))
+        return weight_names
+
     def setUp(self):
         self.op_type = "cudnn_lstm"
         self.dtype = np.float64
-        self.sequence_length = np.array([12, 11, 10, 9, 8], dtype=np.int32)
+        self.sequence_length = np.array(
+            [12, 11, 10, 9, 8, 7, 6, 5], dtype=np.int32)
         self.num_layers = 1
         self.is_bidirec = False
         self.is_test = False
-        self.act = "rnn_relu"
+        #        self.act = "rnn_relu"
+        self.act = "rnn_tanh"
         self.dropout = 0.
         self.set_attrs()
 
         direction_num = 2 if self.is_bidirec else 1
         direction = "bidirectional" if self.is_bidirec else "forward"
         seq_length = 12
-        batch_size = 5
-        input_size = 21
-        hidden_size = 21
-
+        batch_size = 8
+        input_size = 20
+        hidden_size = 15
         input = np.random.uniform(
             low=-0.1, high=0.1,
             size=(seq_length, batch_size, input_size)).astype(self.dtype)
+
+        #self.sequence_length = None
         if self.sequence_length is not None:
-            input[11][1:][:] = 0
-            input[10][2:][:] = 0
-            input[9][3:][:] = 0
-            input[8][4:][:] = 0
+            input[3][1:][:] = 0
+            input[4][2:][:] = 0
+            input[2][3:][:] = 0
+            input[1][4:][:] = 0
 
         flat_w = create_parameter_for_rnn(
             input_size,
@@ -164,6 +181,8 @@ class TestSimpleRNNOpCpu(OpTest):
             self.num_layers,
             self.is_bidirec,
             gate_num=1)
+        print("flat_w", flush=True)
+        print(flat_w)
 
         rnn1 = SimpleRNN(
             input_size,
@@ -214,15 +233,31 @@ class TestSimpleRNNOpCpu(OpTest):
     def set_attrs(self):
         pass
 
-    def test_output_with_place(self):
+#    def test_output_with_place(self):
+#        place = core.CPUPlace()
+#        self.check_output_with_place(
+#            place, no_check_set=['Reserve', 'StateOut', 'LastC'])
+
+    def test_grad_with_place(self):
         place = core.CPUPlace()
-        self.check_output_with_place(
-            place, no_check_set=['Reserve', 'StateOut', 'LastC'])
+        direction_num = 2 if self.is_bidirec else 1
+        var_name_list = self.get_weight_names(direction_num)
+        grad_check_list = []
+        grad_check_list = ['Input', 'InitH']
+        #grad_check_list = ['InitH']
+        #for var_name in var_name_list:
+        #  if "bias" in var_name:
+        ### if "weight" in var_name and int(var_name[-1]) % 2==0:
+        ##   print(var_name)
+        #    grad_check_list.append(var_name)
+        grad_check_list.extend(var_name_list)
+        self.check_grad_with_place(place,
+                                   set(grad_check_list), ['Out', 'LastH'])
 
 
-class TestSimpleRNNOpCpu1(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.sequence_length = None
+#class TestSimpleRNNOpCpu1(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.sequence_length = None
 
 
 class TestSimpleRNNOpCpu2(TestSimpleRNNOpCpu):
@@ -231,41 +266,39 @@ class TestSimpleRNNOpCpu2(TestSimpleRNNOpCpu):
         self.is_bidirec = True
 
 
-class TestSimpleRNNOpCpu3(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.num_layers = 2
+#class TestSimpleRNNOpCpu3(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.num_layers = 2
 
-
-class TestSimpleRNNOpCpu4(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.is_bidirec = True
-        self.num_layers = 2
-        self.sequence_length = None
-
-
-class TestSimpleRNNOpCpu5(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.is_bidirec = True
-        self.num_layers = 2
-
-
-class TestSimpleRNNOpCpu6(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.is_test = True
-        self.is_bidirec = True
-        self.num_layers = 2
-
-
-class TestSimpleRNNOpCpu8(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.is_test = True
-        self.num_layers = 2
-
-
-class TestSimpleRNNOpCpuTanh1(TestSimpleRNNOpCpu):
-    def set_attrs(self):
-        self.act = "rnn_tanh"
-
+#class TestSimpleRNNOpCpu4(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.is_bidirec = True
+#        self.num_layers = 2
+#        self.sequence_length = None
+#
+#
+#class TestSimpleRNNOpCpu5(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.is_bidirec = True
+#        self.num_layers = 2
+#
+#
+#class TestSimpleRNNOpCpu6(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.is_test = True
+#        self.is_bidirec = True
+#        self.num_layers = 2
+#
+#
+#class TestSimpleRNNOpCpu8(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.is_test = True
+#        self.num_layers = 2
+#
+#
+#class TestSimpleRNNOpCpuTanh1(TestSimpleRNNOpCpu):
+#    def set_attrs(self):
+#        self.act = "rnn_tanh"
 
 if __name__ == '__main__':
     unittest.main()
